@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Configuracoes locais do VS Code (podem conter conexoes do SQLTools)
+.vscode/
