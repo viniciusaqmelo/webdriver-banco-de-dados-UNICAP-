@@ -1,34 +1,21 @@
--- =====================================================================
+
 -- Webdriver - Parte 2
--- sql/parte_2/06_testes.sql : testes automatizados da Parte 2
--- SGBD alvo: MySQL 9.7 LTS (compativel com 8.4 LTS e 26.7)
+-- sql/parte_2/06_testes.sql
+-- Testes automatizados da Parte 2
+-- SGBD: MySQL 9.7 LTS (compativel com 8.4 LTS e 26.7)
+-- Pre-requisito: Parte 1 (01 a 03) e Parte 2 (01 a 05).
 --
--- Pre-requisito: Parte 1 (01 a 03) e Parte 2 (01 a 05) executadas.
+-- PARTE A: executar como root.
+-- Os testes sao registrados em tst_resultado. Os dados sao desfeitos
+-- com ROLLBACK; o AUTO_INCREMENT pode avancar.
+-- A tabela temporaria MEMORY preserva os resultados apos o ROLLBACK.
 --
--- PARTE A - como root (automatica)
---   Cada teste grava uma linha em tst_resultado (teste, descricao,
---   esperado, obtido, status OK/FALHA). Os dados de teste sao criados
---   dentro de uma transacao e desfeitos com ROLLBACK no final, entao a
---   base volta ao estado anterior. Unico efeito permanente: o
---   AUTO_INCREMENT do InnoDB nao volta com ROLLBACK (os proximos ids
---   pulam alguns numeros).
---   tst_resultado e uma tabela TEMPORARY com ENGINE=MEMORY: nao e
---   transacional, por isso os resultados sobrevivem ao ROLLBACK.
---   Os erros esperados (SIGNAL dos triggers e procedures) sao capturados
---   pela procedure auxiliar tst_executar, entao o script vai ate o fim.
---
--- PARTE B - contas proprias (manual, em comentarios no final)
---   Testes que dependem de USER() (visoes por usuario e roles na pratica)
---   so podem ser feitos conectando com cada conta.
---
--- Os ids T01..T52 identificam cada caso no resultado (tabela tst_resultado).
--- =====================================================================
+-- PARTE B: testes manuais com as contas proprias, no final do arquivo.
+-- Os ids T01..T52 identificam os testes.
 
 USE webdriver;
 
--- ---------------------------------------------------------------------
--- 0. Estrutura auxiliar dos testes
--- ---------------------------------------------------------------------
+-- 0. Estrutura auxiliar
 DROP PROCEDURE IF EXISTS tst_registrar;
 DROP PROCEDURE IF EXISTS tst_executar;
 DROP TEMPORARY TABLE IF EXISTS tst_resultado;
@@ -44,7 +31,7 @@ CREATE TEMPORARY TABLE tst_resultado(
 
 DELIMITER $$
 
--- Registra um teste comparando o esperado com o obtido (NULL vira 'NULL').
+-- Registra o resultado de um teste.
 CREATE PROCEDURE tst_registrar(IN p_teste VARCHAR(10), IN p_descricao VARCHAR(200),
                                IN p_esperado VARCHAR(200), IN p_obtido VARCHAR(200))
 BEGIN
@@ -53,13 +40,11 @@ BEGIN
             IF(COALESCE(p_esperado, 'NULL') = COALESCE(p_obtido, 'NULL'), 'OK', 'FALHA'));
 END $$
 
--- Executa um comando (texto) e registra o resultado.
---   p_trecho_erro NULL     -> espera que o comando funcione ('sem erro');
---   p_trecho_erro definido -> espera erro cuja mensagem contenha o trecho.
+-- Executa um comando e registra o resultado ou erro esperado.
 CREATE PROCEDURE tst_executar(IN p_teste VARCHAR(10), IN p_descricao VARCHAR(200),
                               IN p_comando TEXT, IN p_trecho_erro VARCHAR(100))
 BEGIN
-    DECLARE v_msg TEXT DEFAULT NULL;          -- TEXT: mensagens do MySQL podem passar de 255 caracteres
+    DECLARE v_msg TEXT DEFAULT NULL;          -- Mensagens de erro do MySQL
     DECLARE v_obtido VARCHAR(200);
     DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
     BEGIN
@@ -86,14 +71,10 @@ END $$
 
 DELIMITER ;
 
--- =====================================================================
--- PARTE A - testes como root
--- =====================================================================
+-- PARTE A: testes como root
 START TRANSACTION;
 
--- ---------------------------------------------------------------------
--- A.1 atividades_recentes: estrutura e acesso exclusivo do root
--- ---------------------------------------------------------------------
+-- A.1 atividades_recentes
 SET @tst_obtido = (SELECT COLUMN_KEY FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = 'webdriver' AND TABLE_NAME = 'atividades_recentes' AND COLUMN_NAME = 'id_arquivo');
 CALL tst_registrar('T01', 'atividades_recentes tem id_arquivo como PK', 'PRI', @tst_obtido);
@@ -111,9 +92,7 @@ SET @tst_obtido = (SELECT (SELECT COUNT(*) FROM mysql.db WHERE Db = 'webdriver'
                AND (Select_priv = 'Y' OR Insert_priv = 'Y' OR Update_priv = 'Y' OR Delete_priv = 'Y')));
 CALL tst_registrar('T03', 'Nenhuma conta/role do projeto tem privilegio na base inteira ou global', '0', @tst_obtido);
 
--- ---------------------------------------------------------------------
--- A.2 Visoes: existencia e ids ocultos
--- ---------------------------------------------------------------------
+-- A.2 Visões
 SET @tst_obtido = (SELECT COUNT(*) FROM information_schema.VIEWS WHERE TABLE_SCHEMA = 'webdriver');
 CALL tst_registrar('T04', 'Existem as 14 visoes', '14', @tst_obtido);
 
@@ -131,9 +110,7 @@ SET @tst_obtido = (SELECT COUNT(*) FROM information_schema.VIEW_TABLE_USAGE
      WHERE VIEW_SCHEMA = 'webdriver' AND TABLE_NAME = 'atividades_recentes');
 CALL tst_registrar('T07', 'Nenhuma visao le atividades_recentes', '0', @tst_obtido);
 
--- ---------------------------------------------------------------------
 -- A.3 Roles e contas
--- ---------------------------------------------------------------------
 SET @tst_obtido = (SELECT COUNT(*) FROM mysql.user WHERE User IN ('PapelUsuario', 'PapelEmpresa', 'PapelAdm'));
 CALL tst_registrar('T08', 'Existem as roles PapelUsuario, PapelEmpresa e PapelAdm', '3', @tst_obtido);
 
@@ -189,10 +166,7 @@ SET @tst_obtido = (SELECT COUNT(*) FROM mysql.procs_priv
      WHERE Db = 'webdriver' AND Routine_name IN ('chavear', 'verificar_atividades'));
 CALL tst_registrar('T20', 'chavear e verificar_atividades sem EXECUTE para nenhuma role/conta', '0', @tst_obtido);
 
--- ---------------------------------------------------------------------
--- Dados de teste (desfeitos no ROLLBACK). Proprietario: elisa.rocha (5),
--- que nao tem instituicao e, portanto, nao tem limite de espaco.
--- ---------------------------------------------------------------------
+-- Dados temporarios de teste
 INSERT INTO arquivo (nome, tipo, permissoes_acesso, tamanho, data_ultima_modificacao, localizacao, url, id_usuario) VALUES
     ('tst_101_dias.txt', 'text/plain', 'somente proprietário', 10, CURDATE() - INTERVAL 101 DAY, '/tst/101', 'https://webdriver.exemplo.test/tst/101', 5),
     ('tst_100_dias.txt', 'text/plain', 'somente proprietário', 10, CURDATE() - INTERVAL 100 DAY, '/tst/100', 'https://webdriver.exemplo.test/tst/100', 5),
@@ -201,18 +175,13 @@ SET @tst_101  = (SELECT id_arquivo FROM arquivo WHERE nome = 'tst_101_dias.txt')
 SET @tst_100  = (SELECT id_arquivo FROM arquivo WHERE nome = 'tst_100_dias.txt');
 SET @tst_hoje = (SELECT id_arquivo FROM arquivo WHERE nome = 'tst_hoje.txt');
 
--- ---------------------------------------------------------------------
--- A.4 Funcao dos 100 dias
--- ---------------------------------------------------------------------
+-- A.4 Função dos 100 dias
 CALL tst_registrar('T21', 'mais_de_100_dias: alterado ha 101 dias -> verdadeiro', '1', mais_de_100_dias(@tst_101));
 CALL tst_registrar('T22', 'mais_de_100_dias: alterado ha exatamente 100 dias -> falso', '0', mais_de_100_dias(@tst_100));
 CALL tst_registrar('T23', 'mais_de_100_dias: alterado hoje -> falso', '0', mais_de_100_dias(@tst_hoje));
 CALL tst_registrar('T24', 'mais_de_100_dias: arquivo inexistente -> NULL', 'NULL', mais_de_100_dias(-1));
 
--- ---------------------------------------------------------------------
 -- A.5 Procedures
--- ---------------------------------------------------------------------
--- tst_hoje compartilhado com ana (1) e bruno (2); dono = elisa (5)
 INSERT INTO compartilhamento (id_arquivo, id_compartilhado, id_dono, data_compartilhamento) VALUES
     (@tst_hoje, 1, 5, CURDATE()),
     (@tst_hoje, 2, 5, CURDATE());
@@ -243,9 +212,7 @@ CALL tst_executar('T32', 'carregar_arquivo: recusado para conta que nao e usuari
     'CALL carregar_arquivo(''tst_root.pdf'', ''application/pdf'', ''somente proprietário'', 10, ''/tst/root'', ''https://webdriver.exemplo.test/tst/root'', ''v1'')',
     'carregar_arquivo: a conta conectada');
 
--- ---------------------------------------------------------------------
--- A.6 Triggers do enunciado e Safe_security na atualizacao (P9)
--- ---------------------------------------------------------------------
+-- A.6 Triggers e Safe_security
 CALL tst_executar('T33', 'safe_security: bloqueia extensao .exe na insercao',
     'INSERT INTO arquivo (nome, tipo, permissoes_acesso, tamanho, data_ultima_modificacao, localizacao, url, id_usuario) VALUES (''tst_virus.exe'', ''application/octet-stream'', ''somente proprietário'', 10, CURDATE(), ''/tst/v'', ''https://webdriver.exemplo.test/tst/v'', 5)',
     'Safe_security');
@@ -271,7 +238,6 @@ CALL tst_executar('T38', 'safe_security_atualizacao: permite atualizacao comum',
     CONCAT('UPDATE arquivo SET permissoes_acesso = ''proprietário e compartilhados'' WHERE id_arquivo = ', @tst_foto),
     NULL);
 
--- tst_foto nao tem linha em atividades_recentes (inserido direto, sem operacao)
 SET @tst_obtido = (SELECT COUNT(*) FROM atividades_recentes WHERE id_arquivo = @tst_foto);
 CALL tst_registrar('T39', 'registrar_operacao (pre-condicao): arquivo novo sem linha de controle', '0', @tst_obtido);
 INSERT INTO operacao_arquivo (tipo_operacao, data, hora, id_usuario, id_arquivo)
@@ -284,17 +250,13 @@ VALUES ('atualizar', CURDATE(), CURTIME(), 5, @tst_foto);
 SET @tst_obtido = (SELECT CAST(ultima_versao AS CHAR) FROM atividades_recentes WHERE id_arquivo = @tst_foto);
 CALL tst_registrar('T41', 'registrar_operacao: nova operacao atualiza a data', CAST(CURDATE() AS CHAR), @tst_obtido);
 
-CALL chavear(@tst_foto);   -- deixa nao_prioritario
+CALL chavear(@tst_foto);
 INSERT INTO compartilhamento (id_arquivo, id_compartilhado, id_dono, data_compartilhamento)
 VALUES (@tst_foto, 3, 5, CURDATE());
 SET @tst_obtido = (SELECT acesso FROM atividades_recentes WHERE id_arquivo = @tst_foto);
 CALL tst_registrar('T42', 'atualizar_acesso: novo compartilhamento marca o arquivo como prioritario', 'prioritario', @tst_obtido);
 
--- ---------------------------------------------------------------------
--- A.7 Limite de espaco por usuario (P6/B17)
--- Cenario: plano de 1000 bytes por usuario; usuario tst.limite na
--- instituicao que aderiu a esse plano.
--- ---------------------------------------------------------------------
+-- A.7 Limite de espaço por usuario
 INSERT INTO plano (nome, duracao, espaco_por_usuario) VALUES ('tst_plano_1000_bytes', 1, 1000);
 SET @tst_plano = LAST_INSERT_ID();
 INSERT INTO instituicao (nome, causa_social, endereco, id_plano, data_aquisicao)
@@ -325,7 +287,6 @@ CALL tst_executar('T47', 'limite de espaco: reduzir arquivo de 600 para 500 -> p
     CONCAT('UPDATE arquivo SET tamanho = 500 WHERE id_arquivo = ', @tst_a),
     NULL);
 
--- plano reduzido para 500 bytes: o usuario fica acima do limite (900)
 UPDATE plano SET espaco_por_usuario = 500 WHERE id_plano = @tst_plano;
 CALL tst_executar('T48', 'limite de espaco: acima do limite, alterar so permissoes -> permitido',
     CONCAT('UPDATE arquivo SET permissoes_acesso = ''proprietário e compartilhados'' WHERE id_arquivo = ', @tst_a),
@@ -343,9 +304,7 @@ CALL tst_executar('T51', 'limite de espaco: usuario do plano Basico (5 GB) com +
     'INSERT INTO arquivo (nome, tipo, permissoes_acesso, tamanho, data_ultima_modificacao, localizacao, url, id_usuario) VALUES (''tst_grande_3.iso'', ''application/x-iso9660-image'', ''somente proprietário'', 10737418240, CURDATE(), ''/tst/g3'', ''https://webdriver.exemplo.test/tst/g3'', 3)',
     'Limite de espaco');
 
--- ---------------------------------------------------------------------
--- Desfaz todos os dados de teste
--- ---------------------------------------------------------------------
+-- Desfaz os dados de teste
 ROLLBACK;
 
 SET @tst_obtido = (SELECT (SELECT COUNT(*) FROM arquivo WHERE nome LIKE 'tst\_%')
@@ -353,23 +312,18 @@ SET @tst_obtido = (SELECT (SELECT COUNT(*) FROM arquivo WHERE nome LIKE 'tst\_%'
           + (SELECT COUNT(*) FROM plano   WHERE nome LIKE 'tst\_%'));
 CALL tst_registrar('T52', 'ROLLBACK: nenhum dado de teste ficou na base', '0', @tst_obtido);
 
--- ---------------------------------------------------------------------
 -- Resultado
--- ---------------------------------------------------------------------
 SELECT teste, descricao, esperado, obtido, status FROM tst_resultado ORDER BY ordem;
 SELECT status, COUNT(*) AS quantidade FROM tst_resultado GROUP BY status;
 
 DROP PROCEDURE IF EXISTS tst_registrar;
 DROP PROCEDURE IF EXISTS tst_executar;
 
--- =====================================================================
--- PARTE B - testes com as contas proprias (manual)
--- =====================================================================
+-- PARTE B: testes manuais com as contas proprias
 -- Abrir uma conexao para cada conta (Workbench: nova conexao; Codespace:
 -- docker exec -it webdriver-mysql mysql -u <login> -p webdriver).
 -- Senhas: README, secao "Credenciais ficticias de teste".
--- Esperados considerando a base logo apos os scripts 01-03 e 01-05
--- (sem o 04_consultas_crud.sql e sem o 07_demonstracao.sql).
+-- Esperados apos executar os scripts 01-03 e 01-05, sem os scripts 04 e 07.
 --
 -- TB01 ana.souza (PapelUsuario + PapelEmpresa)
 --   SELECT * FROM vw_arquivos_usuario;
@@ -382,15 +336,14 @@ DROP PROCEDURE IF EXISTS tst_executar;
 --   WHERE nome = 'logo_instituto.png';      -- esperado: 1 linha alterada
 -- TB03 ana.souza: historico somente leitura
 --   DELETE FROM vw_historico_operacoes;     -- esperado: erro 1142 (DELETE negado)
--- TB04 ana.souza: tabela base e atividades_recentes negadas
+-- TB04 ana.souza: acesso negado as tabelas base
 --   SELECT * FROM arquivo;                  -- esperado: erro 1142
 --   SELECT * FROM atividades_recentes;      -- esperado: erro 1142
 -- TB05 ana.souza: carregar_arquivo
 --   CALL carregar_arquivo('plano_acao.pdf', 'application/pdf', 'somente proprietário', 51200,
 --        '/armazenamento/u1/plano_acao.pdf', 'https://webdriver.exemplo.test/arquivos/plano_acao',
 --        'Versão inicial do plano de ação.');
---     esperado: arquivo_carregado = plano_acao.pdf; o arquivo aparece em
---     vw_arquivos_usuario e em vw_historico_operacoes ('carregar')
+--     esperado: arquivo_carregado = plano_acao.pdf; aparece nas visoes de arquivos e historico
 --   CALL carregar_arquivo('instalador.exe', 'application/octet-stream', 'somente proprietário', 10,
 --        '/x', 'https://webdriver.exemplo.test/x', 'x');
 --     esperado: erro 1644 Safe_security (nada e gravado)
