@@ -1,21 +1,3 @@
--- =====================================================================
--- Webdriver - Parte 2
--- sql/parte_2/02_funcao_procedures.sql : funcoes e stored procedures
--- SGBD alvo: MySQL 9.7 LTS (compativel com 8.4 LTS e 26.7)
--- Executar como root, depois do 01_atividades_recentes.sql.
---
--- Conteudo:
---   enunciado : mais_de_100_dias, verificar_atividades, conta_usuarios,
---               chavear, remover_acessos
---   apoio     : eh_executavel e excede_espaco (usadas pelos triggers do
---               03_triggers.sql) e carregar_arquivo (insercao de arquivo
---               pelo PapelUsuario - P5/B16)
--- Estrutura conforme a Aula 12 (CREATE FUNCTION ... RETURNS ... BEGIN
--- DECLARE ... RETURN ... END; CREATE PROCEDURE (IN/OUT) ... BEGIN ... END).
---
--- Observacao: as instrucoes UPDATE/DELETE filtram por coluna de chave,
--- para funcionarem com o "safe updates" padrao do MySQL Workbench.
--- =====================================================================
 
 USE webdriver;
 
@@ -30,14 +12,7 @@ DROP PROCEDURE IF EXISTS carregar_arquivo;
 
 DELIMITER $$
 
--- ---------------------------------------------------------------------
--- Funcao: "verifica se tem mais de 100 dias que o arquivo recebeu uma
--- ultima alteracao, caso sim retorne verdadeiro, caso nao, retorne falso"
--- Base: arquivo.data_ultima_modificacao (data da ultima alteracao, A16).
--- Retorna NULL se o arquivo nao existir.
--- READS SQL DATA: exigido pelo MySQL quando o log binario esta ativo.
--- Uso: SELECT mais_de_100_dias(1);
--- ---------------------------------------------------------------------
+
 CREATE FUNCTION mais_de_100_dias(p_id_arquivo INT)
 RETURNS BOOLEAN
 READS SQL DATA
@@ -51,11 +26,7 @@ BEGIN
     RETURN DATEDIFF(CURDATE(), v_ultima_alteracao) > 100;
 END $$
 
--- ---------------------------------------------------------------------
--- Verificar_atividades: "atualizar toda a tabela de atividades_recentes
--- com a data atual" - leitura literal (B05).
--- Uso: CALL verificar_atividades();
--- ---------------------------------------------------------------------
+
 CREATE PROCEDURE verificar_atividades()
 BEGIN
     UPDATE atividades_recentes
@@ -65,12 +36,7 @@ BEGIN
     SELECT ROW_COUNT() AS linhas_atualizadas;
 END $$
 
--- ---------------------------------------------------------------------
--- Conta_usuarios: "receba um id de um arquivo e conte quantos usuarios
--- diferentes o mesmo possui" = usuarios com acesso: proprietario +
--- usuarios com quem foi compartilhado (B06, regra RN16).
--- Uso: CALL conta_usuarios(1, @total); SELECT @total;
--- ---------------------------------------------------------------------
+
 CREATE PROCEDURE conta_usuarios(IN p_id_arquivo INT, OUT p_total INT)
 BEGIN
     SELECT COUNT(*) INTO p_total
@@ -78,7 +44,7 @@ BEGIN
         SELECT id_usuario AS id_usuario
         FROM arquivo
         WHERE id_arquivo = p_id_arquivo
-        UNION                                   -- UNION elimina repeticoes
+        UNION                                   
         SELECT id_compartilhado
         FROM compartilhamento
         WHERE id_arquivo = p_id_arquivo
@@ -87,11 +53,7 @@ BEGIN
     SELECT p_total AS total_usuarios;
 END $$
 
--- ---------------------------------------------------------------------
--- Chavear: "Atualiza o arquivo de prioritario para nao prioritario e
--- vice-versa" (na tabela atividades_recentes).
--- Uso: CALL chavear(1);
--- ---------------------------------------------------------------------
+
 CREATE PROCEDURE chavear(IN p_id_arquivo INT)
 BEGIN
     DECLARE v_acesso VARCHAR(15);
@@ -109,13 +71,7 @@ BEGIN
     SELECT id_arquivo, acesso FROM atividades_recentes WHERE id_arquivo = p_id_arquivo;
 END $$
 
--- ---------------------------------------------------------------------
--- Remover_acessos: "recebe o id de um arquivo e remove o acesso de todos
--- os usuarios menos do proprietario".
--- O proprietario esta em arquivo.id_usuario e nunca em compartilhamento
--- (A10), portanto basta apagar os compartilhamentos do arquivo.
--- Uso: CALL remover_acessos(1);
--- ---------------------------------------------------------------------
+
 CREATE PROCEDURE remover_acessos(IN p_id_arquivo INT)
 BEGIN
     DELETE FROM compartilhamento
@@ -124,17 +80,7 @@ BEGIN
     SELECT ROW_COUNT() AS acessos_removidos;
 END $$
 
--- =====================================================================
--- Rotinas de apoio (nao pedidas pelo enunciado)
--- =====================================================================
 
--- ---------------------------------------------------------------------
--- eh_executavel: regra do Safe_security em um so lugar (B07).
--- Verdadeiro se o tipo (MIME) for de executavel ou se a extensao do nome
--- for de executavel. Usada nos triggers safe_security (BEFORE INSERT) e
--- safe_security_atualizacao (BEFORE UPDATE) - P9.
--- Uso: SELECT eh_executavel('setup.exe', 'application/octet-stream');
--- ---------------------------------------------------------------------
 CREATE FUNCTION eh_executavel(p_nome VARCHAR(255), p_tipo VARCHAR(100))
 RETURNS BOOLEAN
 DETERMINISTIC
@@ -152,15 +98,7 @@ BEGIN
                 ('exe', 'bat', 'cmd', 'com', 'msi', 'sh', 'bin', 'scr', 'ps1', 'vbs', 'jar', 'apk'));
 END $$
 
--- ---------------------------------------------------------------------
--- excede_espaco: regra do limite de espaco por usuario (P6/B17).
--- Soma os tamanhos dos arquivos do proprietario (sem contar o arquivo
--- p_id_arquivo_ignorado, que e o arquivo sendo alterado) mais o tamanho
--- novo e compara com plano.espaco_por_usuario do plano da instituicao do
--- proprietario. Usuario sem instituicao, ou cuja instituicao nao tem
--- plano, nao tem limite (retorna falso).
--- Uso: SELECT excede_espaco(1, NULL, 1048576);
--- ---------------------------------------------------------------------
+
 CREATE FUNCTION excede_espaco(p_id_usuario INT, p_id_arquivo_ignorado INT, p_tamanho_novo BIGINT)
 RETURNS BOOLEAN
 READS SQL DATA
@@ -187,26 +125,7 @@ BEGIN
     RETURN v_ocupado + p_tamanho_novo > v_limite;
 END $$
 
--- ---------------------------------------------------------------------
--- carregar_arquivo: insercao de arquivo pelo PapelUsuario (P5/B16).
--- A visao vw_arquivos_usuario oculta id_usuario (ids ocultos), por isso
--- o MySQL nao aceita INSERT por ela. Esta procedure faz o "carregar"
--- completo da Parte 1 (RN21): arquivo + operacao "carregar" + 1a versao,
--- na mesma transacao. O proprietario e a conta conectada (B01):
--- usuario.login = SUBSTRING_INDEX(USER(), '@', 1).
--- SQL SECURITY DEFINER: executa com os privilegios de quem a criou (root),
--- entao o PapelUsuario precisa apenas de EXECUTE nela.
--- Os triggers safe_security e limite_espaco_insercao continuam valendo:
--- se bloquearem, a transacao inteira e desfeita.
--- Nao chamar dentro de outra transacao (START TRANSACTION faz COMMIT
--- implicito da transacao anterior).
--- Uso (conectado como ana.souza):
---   CALL webdriver.carregar_arquivo('plano_acao.pdf', 'application/pdf',
---        'proprietário e compartilhados', 51200,
---        '/armazenamento/u1/plano_acao.pdf',
---        'https://webdriver.exemplo.test/arquivos/plano_acao',
---        'Versão inicial do plano de ação.');
--- ---------------------------------------------------------------------
+
 CREATE PROCEDURE carregar_arquivo(
     IN p_nome               VARCHAR(255),
     IN p_tipo               VARCHAR(100),
