@@ -1,9 +1,4 @@
--- =====================================================================
--- Webdriver - Parte 1
--- sql/parte_1/03_insert_dados_teste.sql : dados de teste ficticios
--- SGBD alvo: MySQL 9.7 LTS (compativel com 8.4 LTS e 26.7)
--- Executar como root, depois do 02_create_tables.sql.
---
+
 -- Todos os nomes, e-mails, enderecos e URLs sao ficticios.
 -- Dominio .test e reservado (RFC 2606) e nao pertence a ninguem.
 -- IDs informados explicitamente para que as referencias sejam previsiveis.
@@ -22,9 +17,7 @@
 
 USE webdriver;
 
--- ---------------------------------------------------------------------
--- plano
--- ---------------------------------------------------------------------
+
 INSERT INTO plano (id_plano, nome, duracao, espaco_por_usuario) VALUES
     (1, 'Básico',        12,   5368709120),   --   5 GB por usuário
     (2, 'Intermediário', 12,  21474836480),   --  20 GB por usuário

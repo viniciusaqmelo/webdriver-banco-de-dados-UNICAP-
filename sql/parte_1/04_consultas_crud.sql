@@ -1,16 +1,4 @@
--- =====================================================================
--- Webdriver - Parte 1
--- sql/parte_1/04_consultas_crud.sql : inserir, buscar, atualizar e remover
--- SGBD alvo: MySQL 9.7 LTS (compativel com 8.4 LTS e 26.7)
---
--- Pre-requisito: executar 01, 02 e 03 antes deste script.
--- Se a Parte 2 ja tiver sido instalada, os triggers tambem atuam aqui
--- (registrar_operacao, atualizar_acesso, safe_security e limite de espaco).
--- Entidade principal do CRUD: arquivo (A31). As operacoes auxiliares
--- cobrem compartilhamento, comentario, suporte e consultas de apoio.
--- As instrucoes estao em blocos independentes e numerados; execute-as
--- na ordem para que os IDs citados nos comentarios correspondam.
--- =====================================================================
+
 
 USE webdriver;
 

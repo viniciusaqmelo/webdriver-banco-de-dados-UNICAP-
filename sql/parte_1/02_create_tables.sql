@@ -1,19 +1,3 @@
--- =====================================================================
--- Webdriver - Parte 1
--- sql/parte_1/02_create_tables.sql : criacao das tabelas (modelo fisico)
--- SGBD alvo: MySQL 9.7 LTS (compativel com 8.4 LTS e 26.7)
--- Executar como root, depois do 01_create_database.sql.
---
--- Ordem de criacao (respeita as dependencias de chave estrangeira):
---   1 plano -> 2 instituicao -> 3 usuario -> 4 administrador -> 5 arquivo
---   -> 6 compartilhamento -> 7 comentario -> 8 suporte
---   -> 9 operacao_arquivo -> 10 historico_versionamento
---
--- Nomes de restricoes: pk_<tabela>, fk_<tabela>_<referencia>,
--- uq_<tabela>_<coluna>, ck_<tabela>_<regra>.
--- Indices: o InnoDB cria automaticamente um indice para cada chave
--- estrangeira; nenhum indice adicional e necessario na Parte 1.
--- =====================================================================
 
 USE webdriver;
 
